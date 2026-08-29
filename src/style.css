@@ -1,0 +1,26 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1016; font-family: "Helvetica Neue", Arial, sans-serif; }
+#game { display: block; width: 100%; height: 100%; }
+#hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+#title { position: absolute; top: 18px; left: 22px; font-weight: 900; letter-spacing: .18em; font-size: 14px; color: #ffd23f; }
+#minimap { position: absolute; left: 22px; bottom: 22px; width: 200px; height: 200px; filter: drop-shadow(0 4px 12px rgba(0,0,0,.5)); pointer-events: auto; cursor: pointer; }
+#where { position: absolute; left: 236px; bottom: 30px; }
+#place { font-size: 13px; font-weight: 900; letter-spacing: .16em; color: #ffd23f; margin-bottom: 4px; }
+#street { font-size: 26px; font-weight: 700; font-style: italic; }
+#speed { position: absolute; right: 26px; bottom: 22px; font-size: 54px; font-weight: 900; line-height: 1; }
+#speed small { font-size: 14px; margin-left: 6px; opacity: .8; font-weight: 400; }
+#hint { position: absolute; top: 18px; right: 22px; font-size: 12px; opacity: .7; }
+#loading { position: fixed; inset: 0; background: #1a1016; display: flex; align-items: center; justify-content: center; color: #fff; transition: opacity .6s; }
+#loading.hidden { opacity: 0; pointer-events: none; }
+#loading h1 { font-weight: 900; letter-spacing: .25em; color: #ffd23f; font-size: 28px; margin-bottom: 12px; }
+#loading p { opacity: .7; font-size: 14px; }
+#clock { position: absolute; top: 40px; right: 22px; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; opacity: .9; }
+#fare { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); padding: 8px 18px; border-radius: 6px; background: rgba(0,0,0,.45); font-weight: 800; letter-spacing: .08em; font-size: 15px; display: none; }
+#fare[data-phase="pickup"] { color: #3dff8a; } #fare[data-phase="dropoff"] { color: #ffd23f; } #fare[data-phase="idle"] { color: #fff; }
+#flash { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); font-size: 40px; font-weight: 900; font-style: italic; color: #ffd23f; display: none; }
+#money { position: absolute; right: 26px; bottom: 90px; font-size: 22px; font-weight: 800; color: #3dff8a; }
+#bigmap { position: fixed; inset: 0; background: rgba(8,10,16,.92); display: none; z-index: 20; }
+#bigmap.open { display: block; }
+#bigmap-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#bigmap-hint { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .06em; text-shadow: 0 2px 8px rgba(0,0,0,.8); pointer-events: none; }
+#bigmap-close { position: absolute; top: 14px; right: 18px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 26px; cursor: pointer; }

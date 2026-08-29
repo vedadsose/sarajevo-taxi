@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sarajevo Taxi</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      <div id="title">SARAJEVO TAXI</div>
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div id="where"><div id="place">SARAJEVO</div><div id="street">—</div></div>
+      <div id="speed"><span id="kmh">0</span><small>km/h</small></div>
+      <div id="hint">WASD / arrows · SPACE handbrake · R flip upright · T back to Titova · C camera · N skip time · P rain · H horn · M map</div>
+      <div id="clock">18:12</div>
+      <div id="fare"></div>
+      <div id="flash"></div>
+      <div id="money">0.00 KM</div>
+    </div>
+    <div id="bigmap"><canvas id="bigmap-canvas"></canvas><div id="bigmap-hint">Klikni na mapu da se teleportuješ · M ili Esc zatvara</div><button id="bigmap-close">×</button></div>
+    <div id="loading"><div class="box"><h1>SARAJEVO TAXI</h1><p id="loadmsg">Loading Sarajevo…</p></div></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
