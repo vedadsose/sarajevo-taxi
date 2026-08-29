@@ -47,6 +47,6 @@ node scripts/audit-roads.mjs           # smoothness / junction / bridge report
 
 ## Play online
 
-**https://sarajevo-taxi-production.up.railway.app** — static build served by nginx on Railway (`Dockerfile` + `nginx.conf`). Every `railway up` from this folder redeploys; the repo lives at https://github.com/vedadsose/sarajevo-taxi.
+**https://sarajevo-taxi-production.up.railway.app** — static build served by nginx on Railway (`Dockerfile` + `nginx/default.conf.template`, nginx listens on Railway's `$PORT`). Every `railway up` from this folder redeploys; the repo lives at https://github.com/vedadsose/sarajevo-taxi.
 
 To host elsewhere: `npm run build` and serve `dist/` from any static host.
