@@ -45,10 +45,8 @@ node scripts/audit-roads.mjs           # smoothness / junction / bridge report
 
 `src/city.js` then builds road surfaces, kerbs, pavements, markings, bridges (with solid parapets), lamps and the collision meshes from `road.line`.
 
-## Share with friends
+## Play online
 
-```sh
-npm run build
-```
+**https://sarajevo-taxi-production.up.railway.app** — static build served by nginx on Railway (`Dockerfile` + `nginx.conf`). Every `railway up` from this folder redeploys; the repo lives at https://github.com/vedadsose/sarajevo-taxi.
 
-Deploy the `dist/` folder to any static host (Vercel, Netlify, GitHub Pages).
+To host elsewhere: `npm run build` and serve `dist/` from any static host.
