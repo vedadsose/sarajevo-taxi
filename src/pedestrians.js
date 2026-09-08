@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const COUNT = 380, NEAR = 260, FAR = 330;
 const SHIRTS = ['#2b2f3a', '#7a1f1f', '#1f3d7a', '#e8e2d4', '#556b2f', '#3a3a3a', '#b04a2a', '#d9c7a0', '#4a2a5a', '#8a8f99', '#c33', '#2f6f6f'];
@@ -16,16 +17,18 @@ export function createPedestrians(scene, walks, player) {
   }).filter((w) => w.total > 6);
   const CELL = 120, grid = new Map();
   W.forEach((w, i) => { const p = w.pts[Math.floor(w.pts.length / 2)]; const k = `${Math.floor(p[0] / CELL)},${Math.floor(p[2] / CELL)}`; if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); });
+  const A = { x: 0, y: 0, z: 0, yaw: 0 }; // scratch — avoids one object allocation per pedestrian per frame
   const at = (w, s) => {
     s = Math.max(0, Math.min(w.total, s));
     let lo = 0, hi = w.cum.length - 1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (w.cum[m] <= s) lo = m; else hi = m; }
     const t = (s - w.cum[lo]) / ((w.cum[hi] - w.cum[lo]) || 1), a = w.pts[lo], b = w.pts[hi];
-    return { x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t, z: a[2] + (b[2] - a[2]) * t, yaw: Math.atan2(b[0] - a[0], b[2] - a[2]) };
+    A.x = a[0] + (b[0] - a[0]) * t; A.y = a[1] + (b[1] - a[1]) * t; A.z = a[2] + (b[2] - a[2]) * t; A.yaw = Math.atan2(b[0] - a[0], b[2] - a[2]);
+    return A;
   };
 
-  const torso = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.62, 0.24), new THREE.MeshStandardMaterial({ roughness: 0.9 }), COUNT);
-  const legs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.36, 0.8, 0.22), new THREE.MeshStandardMaterial({ roughness: 0.9 }), COUNT);
+  const torso = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.19, 0.34, 3, 10), new THREE.MeshStandardMaterial({ roughness: 0.9 }), COUNT);
+  const legs = new THREE.InstancedMesh(new RoundedBoxGeometry(0.34, 0.8, 0.2, 2, 0.08), new THREE.MeshStandardMaterial({ roughness: 0.9 }), COUNT);
   const head = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), new THREE.MeshStandardMaterial({ roughness: 0.7 }), COUNT);
   for (const m of [torso, legs, head]) { m.frustumCulled = false; m.castShadow = true; group.add(m); }
 
@@ -44,8 +47,10 @@ export function createPedestrians(scene, walks, player) {
     const w = W[wi];
     peds[i] = { w, s: Math.random() * w.total, dir: Math.random() < 0.5 ? 1 : -1, v: 1.1 + Math.random() * 0.7, phase: Math.random() * 6.28, state: 'walk', timer: 0, yaw: 0 };
     torso.setColorAt(i, c.set(pick(SHIRTS))); legs.setColorAt(i, c.set(pick(PANTS))); head.setColorAt(i, c.set(pick(SKIN)));
+    colorsDirty = true;
     return true;
   }
+  let colorsDirty = false;
   for (let i = 0; i < COUNT; i++) if (!spawn(i, true)) peds[i] = null;
   torso.instanceColor.needsUpdate = legs.instanceColor.needsUpdate = head.instanceColor.needsUpdate = true;
 
@@ -84,7 +89,7 @@ export function createPedestrians(scene, walks, player) {
       }
     }
     torso.instanceMatrix.needsUpdate = legs.instanceMatrix.needsUpdate = head.instanceMatrix.needsUpdate = true;
-    torso.instanceColor.needsUpdate = legs.instanceColor.needsUpdate = head.instanceColor.needsUpdate = true;
+    if (colorsDirty) { torso.instanceColor.needsUpdate = legs.instanceColor.needsUpdate = head.instanceColor.needsUpdate = true; colorsDirty = false; }
   }
   console.log(`[peds] ${W.length} walkable runs, ${COUNT} pedestrians`);
   return { group, update, get hits() { return hits; } };

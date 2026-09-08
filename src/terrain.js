@@ -126,14 +126,17 @@ export function createTerrain(RAPIER, world, data) {
       if (diagA(r, c)) { index[k++] = i00; index[k++] = i10; index[k++] = i11; index[k++] = i00; index[k++] = i11; index[k++] = i01; }
       else { index[k++] = i00; index[k++] = i10; index[k++] = i01; index[k++] = i10; index[k++] = i11; index[k++] = i01; }
     }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  // shared attributes for all chunks; normals computed once on the full grid
+  const posAttr = new THREE.BufferAttribute(pos, 3), colAttr = new THREE.BufferAttribute(col, 3);
   const uv = new Float32Array(cols * rows * 2);
   for (let i = 0; i < cols * rows; i++) { uv[i * 2] = pos[i * 3] / 9; uv[i * 2 + 1] = pos[i * 3 + 2] / 9; }
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  geo.setIndex(new THREE.BufferAttribute(index, 1));
-  geo.computeVertexNormals();
+  const uvAttr = new THREE.BufferAttribute(uv, 2);
+  const full = new THREE.BufferGeometry();
+  full.setAttribute('position', posAttr);
+  full.setIndex(new THREE.BufferAttribute(index, 1));
+  full.computeVertexNormals();
+  const nrmAttr = full.getAttribute('normal');
+  full.dispose();
   // ground texture: soft grass/earth noise (multiplies the vertex colours)
   const tc = document.createElement('canvas'); tc.width = tc.height = 256;
   const g2 = tc.getContext('2d'); g2.fillStyle = '#c9c9c9'; g2.fillRect(0, 0, 256, 256);
@@ -141,8 +144,32 @@ export function createTerrain(RAPIER, world, data) {
   for (let i = 0; i < 600; i++) { g2.fillStyle = `rgba(255,255,255,${0.05 + Math.random() * 0.1})`; g2.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 6, 1 + Math.random() * 2); }
   const groundTex = new THREE.CanvasTexture(tc); groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping; groundTex.anisotropy = 8;
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: groundTex, roughness: 1, metalness: 0 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
+  // one mesh per ~840 m block, sharing the attribute buffers, so off-screen terrain is frustum-culled
+  const mesh = new THREE.Group();
   mesh.name = 'terrain';
+  const BLOCK = 168;
+  for (let br = 0; br < rows - 1; br += BLOCK)
+    for (let bc = 0; bc < cols - 1; bc += BLOCK) {
+      const r1 = Math.min(rows - 1, br + BLOCK), c1 = Math.min(cols - 1, bc + BLOCK);
+      const idx = new Uint32Array((r1 - br) * (c1 - bc) * 6);
+      let k = 0, lo = Infinity, hi = -Infinity;
+      for (let r = br; r < r1; r++)
+        for (let c = bc; c < c1; c++) {
+          const i00 = r * cols + c, i01 = i00 + 1, i10 = i00 + cols, i11 = i10 + 1;
+          if (diagA(r, c)) { idx[k++] = i00; idx[k++] = i10; idx[k++] = i11; idx[k++] = i00; idx[k++] = i11; idx[k++] = i01; }
+          else { idx[k++] = i00; idx[k++] = i10; idx[k++] = i01; idx[k++] = i10; idx[k++] = i11; idx[k++] = i01; }
+          const h = heights[i00];
+          if (h < lo) lo = h; if (h > hi) hi = h;
+        }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', posAttr); g.setAttribute('color', colAttr); g.setAttribute('uv', uvAttr); g.setAttribute('normal', nrmAttr);
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      const x0 = originX + bc * step, x1 = originX + c1 * step, z0 = originZ + br * step, z1 = originZ + r1 * step;
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (lo + hi) / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, hi - lo + 8, z1 - z0) / 2);
+      g.boundingBox = new THREE.Box3(new THREE.Vector3(x0, lo - 2, z0), new THREE.Vector3(x1, hi + 2, z1));
+      const m = new THREE.Mesh(g, mat);
+      m.receiveShadow = true;
+      mesh.add(m);
+    }
   return { mesh, groundHeight, collider };
 }

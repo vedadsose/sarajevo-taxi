@@ -14,11 +14,28 @@
       <canvas id="minimap" width="200" height="200"></canvas>
       <div id="where"><div id="place">SARAJEVO</div><div id="street">—</div></div>
       <div id="speed"><span id="kmh">0</span><small>km/h</small></div>
-      <div id="hint">WASD / arrows · SPACE handbrake · R flip upright · T back to Titova · C camera · N skip time · P rain · H horn · M map</div>
+      <div id="hint">WASD / arrows · SPACE handbrake · R flip upright · T back to Titova · C camera · N skip time · P rain · H horn · M map · E edit</div>
       <div id="clock">18:12</div>
       <div id="fare"></div>
       <div id="flash"></div>
       <div id="money">0.00 KM</div>
+    </div>
+    <div id="editor">
+      <div class="ed-title">UREDI GRAD</div>
+      <div class="ed-modes"><button id="ed-mode-road" class="on">Ceste</button><button id="ed-mode-tree">Drveće</button></div>
+      <div id="ed-hint"></div>
+      <div id="ed-selection" style="display:none">
+        <div id="ed-name"></div>
+        <label>Širina <input id="ed-width" type="range" min="3" max="18" step="0.5" /> <span id="ed-width-val"></span></label>
+        <button id="ed-delete" class="danger">Obriši cestu</button>
+      </div>
+      <div class="ed-footer">
+        <span id="ed-count"></span>
+        <button id="ed-apply" class="primary" style="display:none">Primijeni (reload)</button>
+        <button id="ed-download">Preuzmi JSON</button>
+        <button id="ed-reset" class="danger">Poništi sve</button>
+      </div>
+      <div class="ed-note">E zatvara · promjene cesta traže reload · drveće nestaje odmah</div>
     </div>
     <div id="bigmap"><canvas id="bigmap-canvas"></canvas><div id="bigmap-hint">Klikni na mapu da se teleportuješ · M ili Esc zatvara</div><button id="bigmap-close">×</button></div>
     <div id="loading"><div class="box"><h1>SARAJEVO TAXI</h1><p id="loadmsg">Loading Sarajevo…</p></div></div>

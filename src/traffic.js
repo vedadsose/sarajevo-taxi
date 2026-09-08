@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { roadWidth } from './city.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const ROAD_W = { motorway: 14, trunk: 13, primary: 12, secondary: 10, tertiary: 8, residential: 6.5, unclassified: 6, living_street: 5.5, service: 4, pedestrian: 5 };
 const CYCLE = 14, GREEN = 6, AMBER = 1.5; // seconds; red fills the rest
@@ -50,7 +51,7 @@ export function createTrafficLights(data, groundHeight) {
 
   const dark = new THREE.MeshStandardMaterial({ color: '#2a2b2e', roughness: 0.7, metalness: 0.4 });
   const pole = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.09, 4.2, 8), dark, n);
-  const housing = new THREE.InstancedMesh(new THREE.BoxGeometry(0.36, 1.0, 0.3), dark, n);
+  const housing = new THREE.InstancedMesh(new RoundedBoxGeometry(0.36, 1.0, 0.3, 2, 0.09), dark, n);
   const lampGeo = new THREE.SphereGeometry(0.11, 10, 8);
   const lampMat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
   const lamps = [0, 1, 2].map(() => new THREE.InstancedMesh(lampGeo, lampMat, n));

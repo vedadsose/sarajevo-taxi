@@ -24,3 +24,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1016; f
 #bigmap-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 #bigmap-hint { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .06em; text-shadow: 0 2px 8px rgba(0,0,0,.8); pointer-events: none; }
 #bigmap-close { position: absolute; top: 14px; right: 18px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 26px; cursor: pointer; }
+
+#editor { position: fixed; top: 70px; right: 18px; width: 250px; background: rgba(12,14,20,.92); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 14px; color: #fff; display: none; z-index: 15; font-size: 13px; }
+#editor .ed-title { font-weight: 900; letter-spacing: .18em; color: #ffd23f; font-size: 12px; margin-bottom: 10px; }
+#editor .ed-modes { display: flex; gap: 6px; margin-bottom: 8px; }
+#editor button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+#editor button.on { background: #ffd23f; color: #111; font-weight: 700; }
+#editor button.danger { border-color: rgba(255,90,70,.6); color: #ff8a75; }
+#editor button.primary { background: #3dff8a; color: #0a2214; font-weight: 700; }
+#ed-hint { opacity: .65; margin-bottom: 10px; min-height: 16px; }
+#ed-selection { border-top: 1px solid rgba(255,255,255,.12); padding-top: 10px; margin-bottom: 8px; }
+#ed-name { font-weight: 700; margin-bottom: 8px; }
+#ed-selection label { display: block; margin-bottom: 8px; }
+#ed-selection input[type=range] { width: 130px; vertical-align: middle; }
+#editor .ed-footer { border-top: 1px solid rgba(255,255,255,.12); padding-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#ed-count { opacity: .7; margin-right: auto; }
+#editor .ed-note { opacity: .45; margin-top: 8px; font-size: 11px; }

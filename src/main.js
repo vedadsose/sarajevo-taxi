@@ -17,6 +17,8 @@ import { createAudio } from './audio.js';
 import { createSkids } from './skids.js';
 import { createWeather } from './weather.js';
 import { createTrees } from './trees.js';
+import { loadOverrides, applyOverrides } from './overrides.js';
+import { createEditor } from './editor.js';
 
 const msg = (t) => (document.getElementById('loadmsg').textContent = t);
 
@@ -32,7 +34,8 @@ async function main() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  const [data] = await Promise.all([loadData(msg), RAPIER.init()]);
+  const [data, overrides] = await Promise.all([loadData(msg), loadOverrides(), RAPIER.init()]);
+  applyOverrides(data, overrides);
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = 1 / 60;
 
@@ -50,7 +53,7 @@ async function main() {
   const trams = createTrams(RAPIER, world, scene, data, (x, z) => data.sampleHeight(x, z));
   scene.add(trams.group);
 
-  const trees = createTrees(data, (x, z) => data.sampleHeight(x, z), cityObj.isBlocked);
+  const trees = createTrees(data, (x, z) => data.sampleHeight(x, z), cityObj.isBlocked, overrides.treeExclusions);
   scene.add(trees.group);
   const env = createEnvironment(scene, renderer);
   let clock = 18.2; // hours; one game hour every 75 real seconds
@@ -111,6 +114,7 @@ async function main() {
     camPos.set(sx - Math.sin(yaw) * 8, terrain.groundHeight(sx, sz) + 4, sz - Math.cos(yaw) * 8);
   };
   const audio = createAudio();
+  const editor = createEditor({ scene, camera, world, data, trees, overrides });
   const skids = createSkids(scene);
   const weather = createWeather(scene);
   weather.onChange((r) => { env.setRain(r); cityObj.setWet(r); });
@@ -118,11 +122,13 @@ async function main() {
   // Chase camera
   let camMode = 0;
   const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), fwd = new THREE.Vector3(), tmp = new THREE.Vector3();
+  let camCarY = spawn.y; // low-passed car height: suspension heave stays off the screen
   const camRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
   camPos.set(spawn.x - 8, spawn.y + 3, spawn.z);
   function updateCamera(dt) {
     if (window.game && window.game.freeCam) { const f = window.game.freeCam; camera.position.set(f.x, f.y, f.z); camera.lookAt(f.tx, f.ty, f.tz); return; }
     const p = car.position;
+    if (Math.abs(p.y - camCarY) > 1.8) camCarY = p.y; else camCarY += (p.y - camCarY) * Math.min(1, dt * 3);
     fwd.set(0, 0, 1).applyQuaternion(car.mesh.quaternion);
     const vel = car.body.linvel(); const sp = Math.hypot(vel.x, vel.z);
     if (sp > 3) { tmp.set(vel.x, 0, vel.z).normalize(); fwd.lerp(tmp, 0.5).normalize(); }
@@ -133,7 +139,7 @@ async function main() {
       camera.position.copy(camPos); camera.lookAt(camLook); return;
     }
     const dist = camMode === 1 ? 14 : 8.5, height = camMode === 1 ? 5.5 : 3.0;
-    tmp.copy(p).addScaledVector(fwd, -dist); tmp.y += height;
+    tmp.copy(p).addScaledVector(fwd, -dist); tmp.y = camCarY + height;
     // keep camera above ground
     tmp.y = Math.max(tmp.y, terrain.groundHeight(tmp.x, tmp.z) + 1.2);
     // pull camera in if a building blocks the view of the car
@@ -142,18 +148,33 @@ async function main() {
     const hit = world.castRay(camRay, 1, true, undefined, undefined, undefined, car.body);
     if (hit) { const t = Math.max(0.15, (hit.timeOfImpact ?? hit.toi) - 0.08); tmp.set(p.x + camRay.dir.x * t, p.y + 1.0 + camRay.dir.y * t, p.z + camRay.dir.z * t); }
     camPos.lerp(tmp, Math.min(1, dt * (hit ? 12 : 4.5)));
-    camLook.lerp(tmp.copy(p).addScaledVector(fwd, 6).setY(p.y + 1.0), Math.min(1, dt * 8));
+    camLook.lerp(tmp.copy(p).addScaledVector(fwd, 6).setY(camCarY + 1.0), Math.min(1, dt * 8));
     camera.position.copy(camPos); camera.lookAt(camLook);
   }
 
+  msg('Warming up shaders…');
+  await new Promise((r) => setTimeout(r));
+  renderer.compile(scene, camera); // compile every material now instead of hitching mid-drive
   document.getElementById('loading').classList.add('hidden');
   console.log('[game] ready');
 
   let last = performance.now(), acc = 0;
   const STEP = 1 / 60;
+  // dynamic resolution: keep frame time near 60 fps by trading pixel ratio (1.0 … native, max 2)
+  const PX_MAX = Math.min(window.devicePixelRatio || 1, 2);
+  let px = Math.min(PX_MAX, 1.75), frameAvg = 16, lastPxChange = 0;
+  renderer.setPixelRatio(px);
+  const skidRight = new THREE.Vector3(), skidFwd = new THREE.Vector3(), rwA = new THREE.Vector3(), rwB = new THREE.Vector3();
+  let frameNo = 0;
   function frame(now) {
     requestAnimationFrame(frame);
     let dt = Math.min(0.1, (now - last) / 1000); last = now;
+    frameNo++;
+    frameAvg += (Math.min(50, dt * 1000) - frameAvg) * 0.05;
+    if (now - lastPxChange > 1500) {
+      if (frameAvg > 19 && px > 1.0) { px = Math.max(1.0, px - 0.25); renderer.setPixelRatio(px); lastPxChange = now; }
+      else if (frameAvg < 14 && px < PX_MAX) { px = Math.min(PX_MAX, px + 0.25); renderer.setPixelRatio(px); lastPxChange = now; }
+    }
     if (input.pressed('KeyR')) car.reset();
     if (input.pressed('KeyT')) respawn();
     if (input.pressed('KeyC')) camMode = (camMode + 1) % 3;
@@ -161,12 +182,13 @@ async function main() {
     if (input.pressed('KeyM')) minimap.toggleBig();
     if (input.pressed('Escape') && minimap.isOpen) minimap.closeBig();
     if (input.pressed('KeyN')) clock = (clock + 2) % 24;
+    if (input.pressed('KeyE')) editor.toggle();
     clock = (clock + dt / 75) % 24;
     applyTime();
     const ctl = input.override || input;
-    acc += dt;
+    acc = Math.min(acc + dt, 3 * STEP); // cap catch-up: a long frame drops time instead of spiralling
     while (acc >= STEP) { trams.update(STEP); aiCars.update(STEP, car.position, car.speedKmh() / 3.6); car.update(STEP, ctl); world.step(); acc -= STEP; }
-    car.sync(dt);
+    car.sync(dt, Math.min(1, acc / STEP));
     updateCamera(dt);
     env.follow(car.position);
     if (cityObj.group.userData.flame) { const f = cityObj.group.userData.flame; f.scale.set(1 + Math.sin(now / 90) * 0.12, 1 + Math.sin(now / 130) * 0.2, 1 + Math.cos(now / 110) * 0.12); }
@@ -177,16 +199,19 @@ async function main() {
     fares.update(dt, car);
     {
       const v = car.body.linvel(), qq = car.mesh.quaternion;
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(qq), fw = new THREE.Vector3(0, 0, 1).applyQuaternion(qq);
-      const lat = v.x * right.x + v.z * right.z, sp = Math.hypot(v.x, v.z);
+      skidRight.set(1, 0, 0).applyQuaternion(qq); skidFwd.set(0, 0, 1).applyQuaternion(qq);
+      const lat = v.x * skidRight.x + v.z * skidRight.z, sp = Math.hypot(v.x, v.z);
       const skidding = sp > 3 && (Math.abs(lat) > 2.8 || (ctl.handbrake && sp > 4));
-      const rw = [[0.8, -1.3], [-0.8, -1.3]].map(([ox, oz]) => { const w = new THREE.Vector3(ox, -0.2, oz).applyQuaternion(qq).add(car.mesh.position); w.y = terrain.groundHeight(w.x, w.z); return w; });
-      skids.update(dt, rw, fw, skidding);
+      rwA.set(0.8, -0.2, -1.3).applyQuaternion(qq).add(car.mesh.position); rwA.y = terrain.groundHeight(rwA.x, rwA.z);
+      rwB.set(-0.8, -0.2, -1.3).applyQuaternion(qq).add(car.mesh.position); rwB.y = terrain.groundHeight(rwB.x, rwB.z);
+      skids.update(dt, [rwA, rwB], skidFwd, skidding);
       weather.update(dt, camera.position, fwd);
     }
     audio.update(car.speedKmh(), ctl.throttle, input.pressedNow ? input.pressedNow('KeyH') : false);
-    const mk = fares.marker; minimap.update(car.position.x, car.position.z, yaw, mk ? { ...mk, color: fares.state.phase === 'pickup' ? '#3dff8a' : '#ffd23f' } : null);
-    hud.update(car.speedKmh(), cityObj.nearestStreet(car.position.x, car.position.z), minimap.currentPlace(car.position.x, car.position.z), dt);
+    if (frameNo % 3 === 0) {
+      const mk = fares.marker; minimap.update(car.position.x, car.position.z, yaw, mk ? { ...mk, color: fares.state.phase === 'pickup' ? '#3dff8a' : '#ffd23f' } : null);
+      hud.update(car.speedKmh(), cityObj.nearestStreet(car.position.x, car.position.z), minimap.currentPlace(car.position.x, car.position.z), dt * 3);
+    }
     input.endFrame();
     renderer.render(scene, camera);
   }
@@ -201,7 +226,7 @@ async function main() {
   // Debug / automation hooks
   window.game = {
     spawn, respawn,
-    car, world, TUNE, camera, scene, renderer, data, terrain, input, trams, env, peds, aiCars, traffic, fares, weather,
+    car, world, TUNE, camera, scene, renderer, data, terrain, input, trams, env, peds, aiCars, traffic, fares, weather, editor, overrides, trees,
     setClock(h) { clock = h; },
     teleport(lat, lon, yawDeg = 90) {
       const [x, z] = data.toLocal(lat, lon);
@@ -212,6 +237,7 @@ async function main() {
     },
     drive(throttle, steer, handbrake = false) { input.override = throttle === null ? null : { throttle, steer, handbrake }; },
     state() { const p = car.body.translation(); return { x: +p.x.toFixed(1), y: +p.y.toFixed(1), z: +p.z.toFixed(1), kmh: +car.speedKmh().toFixed(1), street: cityObj.nearestStreet(p.x, p.z) }; },
+    get perf() { return { px, frameAvg: +frameAvg.toFixed(1) }; },
   };
 }
 

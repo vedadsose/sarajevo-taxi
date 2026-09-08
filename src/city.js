@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createFacadeMaterials, STYLE, BAYS, FLOORS } from './facades.js';
 import { buildLandmarks } from './landmarks.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const hash = (x, z) => {
   const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
@@ -120,6 +121,29 @@ function makeMesh(P, C, N, opts = {}) {
   return m;
 }
 
+/** Split a triangle soup into ~chunk-sized meshes sharing one material, so off-screen parts are frustum-culled. */
+function emitChunked(P, C, N, mat, chunk = 400) {
+  const buckets = new Map();
+  for (let i = 0; i < P.length; i += 9) {
+    const k = `${Math.floor(P[i] / chunk)},${Math.floor(P[i + 2] / chunk)}`;
+    let b = buckets.get(k);
+    if (!b) { b = { P: [], C: [], N: [] }; buckets.set(k, b); }
+    for (let j = 0; j < 9; j++) { b.P.push(P[i + j]); b.C.push(C[i + j]); b.N.push(N[i + j]); }
+  }
+  const meshes = [];
+  for (const [, b] of buckets) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(b.P, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(b.C, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(b.N, 3));
+    g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, mat);
+    m.receiveShadow = true;
+    meshes.push(m);
+  }
+  return meshes;
+}
+
 function polyArea(pts) {
   let a = 0;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
@@ -204,22 +228,22 @@ export function buildCity(RAPIER, world, data, groundHeight) {
   };
   const sidewalkWidth = (road) => (['primary', 'secondary', 'trunk', 'primary_link', 'secondary_link'].includes(road.type) ? 3.0 : road.type === 'tertiary' ? 2.4 : ['service', 'pedestrian', 'living_street', 'footbridge'].includes(road.type) ? 0 : 1.8);
 
-  // road surfaces
-  const byStyle = new Map();
+  // road surfaces — everything ground-level (roads, pavements, kerbs, markings, junctions) goes into ONE
+  // triangle soup with per-vertex colours, emitted later as chunked meshes sharing a single material
+  const soup = { P: [], C: [], N: [] };
   const roadEdges = new Map(); // road idx -> {L, R, widths}
   city.roads.forEach((road, idx) => {
     if (!road.line) return;
     const st = ROAD_STYLE[road.type] || ROAD_STYLE.residential;
-    if (!byStyle.has(st)) byStyle.set(st, { P: [], C: [], N: [] });
-    const b = byStyle.get(st), widths = lineWidths(road);
-    const e = ribbon3(road.line, widths, 0, new THREE.Color(st.c), b.P, b.C, b.N);
+    const widths = lineWidths(road);
+    const e = ribbon3(road.line, widths, 0, new THREE.Color(st.c), soup.P, soup.C, soup.N);
     colPush(e.tris); roadEdges.set(idx, { L: e.L, R: e.R, widths });
   });
 
   // ---- Sidewalks + kerbs (pavement 12 cm above the road, broken where another road crosses) ----
   const sidewalks = []; // walkable polylines [[x,y,z],...] for pedestrians
   {
-    const P = [], C = [], N = [], pave = new THREE.Color('#a19d93'), paveOld = new THREE.Color('#9a8f7c'), kerbC = new THREE.Color('#8f8c86');
+    const P = soup.P, C = soup.C, N = soup.N, pave = new THREE.Color('#a19d93'), paveOld = new THREE.Color('#9a8f7c'), kerbC = new THREE.Color('#8f8c86');
     city.roads.forEach((road, idx) => {
       if (!road.line) return;
       if (road.type === 'pedestrian' || road.type === 'living_street') { sidewalks.push(road.line.map(([x, y, z]) => [x, y + 0.05, z])); return; }
@@ -242,7 +266,6 @@ export function buildCity(RAPIER, world, data, groundHeight) {
         flush();
       }
     });
-    if (P.length) group.add(makeMesh(P, C, N, { roughness: 0.95 }));
     console.log(`[city] ${sidewalks.length} sidewalk runs`);
   }
 
@@ -266,7 +289,7 @@ export function buildCity(RAPIER, world, data, groundHeight) {
     let nJ = 0;
     for (const [, e] of nodeRoads) {
       if (e.n < 2) continue;
-      const b = byStyle.get(e.st); if (!b) continue;
+      const b = soup;
       const col = new THREE.Color(e.st.c), r = e.w / 2, Nn = 16;
       const rim = []; for (let i = 0; i < Nn; i++) { const a = (i / Nn) * Math.PI * 2, x = e.x + Math.cos(a) * r, z = e.z + Math.sin(a) * r; rim.push([x, surfaceY(e, x, z) + 0.004, z]); }
       for (let i = 0; i < Nn; i++) {
@@ -278,12 +301,9 @@ export function buildCity(RAPIER, world, data, groundHeight) {
     }
     console.log(`[city] ${nJ} junction patches`);
   }
-  const roadMeshes = [];
-  for (const [, b] of byStyle) { const m = makeMesh(b.P, b.C, b.N); roadMeshes.push(m); group.add(m); }
-
   // ---- Road markings on the 3D lines ----
   {
-    const P = [], C = [], N = [], white = new THREE.Color('#d8d5c6');
+    const P = soup.P, C = soup.C, N = soup.N, white = new THREE.Color('#d8d5c6');
     const quadAt = (x, y, z, dx, dz, len, wid) => {
       const hx = dx * len / 2, hz = dz * len / 2, wx = -dz * wid / 2, wz = dx * wid / 2;
       const a = [x - hx - wx, y, z - hz - wz], b = [x - hx + wx, y, z - hz + wz], c = [x + hx + wx, y, z + hz + wz], e = [x + hx - wx, y, z + hz - wz];
@@ -350,9 +370,15 @@ export function buildCity(RAPIER, world, data, groundHeight) {
       for (let i = 0; i < n; i++) { const off = -span / 2 + 0.5 + i; quadAt(cx - dz * off, y, cz + dx * off, dx, dz, 3.0, 0.5); }
       nZ++;
     }
-    if (P.length) group.add(makeMesh(P, C, N, { roughness: 0.8 }));
-    console.log(`[city] road markings: ${P.length / 18 | 0} quads, ${nZ} zebra crossings`);
+    console.log(`[city] road markings: ${nZ} zebra crossings`);
   }
+
+  // emit the ground-level soup as chunked, frustum-culled meshes with one shared material
+  const asphaltMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  const roadMeshes = emitChunked(soup.P, soup.C, soup.N, asphaltMat, 400);
+  for (const m of roadMeshes) group.add(m);
+  console.log(`[city] ground surface: ${soup.P.length / 9 | 0} triangles in ${roadMeshes.length} chunks`);
+  soup.P = soup.C = soup.N = null;
 
   // ---- Street lamps along main roads (instanced), glow discs shown at night ----
   const lampGlow = { mesh: null, heads: null };
@@ -382,7 +408,7 @@ export function buildCity(RAPIER, world, data, groundHeight) {
       const pole = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.09, 7, 6), dark, n);
       const arm = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 0.08, 1.6), dark, n);
       const headMat = new THREE.MeshStandardMaterial({ color: '#f0e6c8', emissive: '#ffd27a', emissiveIntensity: 0 });
-      const head = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.18, 0.7), headMat, n);
+      const head = new THREE.InstancedMesh(new RoundedBoxGeometry(0.5, 0.18, 0.7, 2, 0.06), headMat, n);
       const gc = document.createElement('canvas'); gc.width = gc.height = 128;
       const gg = gc.getContext('2d'); const grd = gg.createRadialGradient(64, 64, 0, 64, 64, 64);
       grd.addColorStop(0, 'rgba(255,205,120,0.55)'); grd.addColorStop(0.5, 'rgba(255,190,100,0.18)'); grd.addColorStop(1, 'rgba(255,180,90,0)');
@@ -460,8 +486,8 @@ export function buildCity(RAPIER, world, data, groundHeight) {
         let dx = nx - px, dz = nz - pz; const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
         l.push([x - dz * 0.72, z + dx * 0.72]); r.push([x + dz * 0.72, z - dx * 0.72]);
       }
-      ribbon(l, 0.14, 0.36, c, groundHeight, P, C, N);
-      ribbon(r, 0.14, 0.36, c, groundHeight, P, C, N);
+      ribbon(l, 0.14, 0.045, c, groundHeight, P, C, N); // rails sit just proud of the road surface
+      ribbon(r, 0.14, 0.045, c, groundHeight, P, C, N);
     }
     if (P.length) group.add(makeMesh(P, C, N, { roughness: 0.4, metalness: 0.6 }));
   }
@@ -498,7 +524,10 @@ export function buildCity(RAPIER, world, data, groundHeight) {
         ribbon(w.pts, w.kind === 'canal' ? 6 : 4, 0, cStream, groundHeight, P, C, N, w.levels);
       }
     }
-    if (P.length) { const m = makeMesh(P, C, N, { roughness: 0.2, metalness: 0.05, transparent: true, opacity: 0.9 }); m.name = 'water'; group.add(m); }
+    if (P.length) {
+      const waterMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.2, metalness: 0.05, transparent: true, opacity: 0.9 });
+      for (const m of emitChunked(P, C, N, waterMat, 500)) { m.name = 'water'; group.add(m); }
+    }
     if (Q.length) group.add(makeMesh(Q, QC, QN, { roughness: 0.95 }));
   }
 
@@ -708,7 +737,7 @@ export function buildCity(RAPIER, world, data, groundHeight) {
     group.userData.flame = flame;
   }
 
-  function setWet(w) { for (const m of roadMeshes) { m.material.roughness = 0.95 - 0.7 * w; m.material.metalness = 0.35 * w; } }
+  function setWet(w) { asphaltMat.roughness = 0.95 - 0.7 * w; asphaltMat.metalness = 0.35 * w; }
   function setNight(nf) {
     mats.setNight(nf);
     if (lampGlow.mesh) { lampGlow.mesh.material.opacity = nf; lampGlow.heads.material.emissiveIntensity = nf * 3; }

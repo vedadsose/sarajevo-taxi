@@ -154,7 +154,7 @@ function processOSM(json) {
     if (t.highway) {
       const foot = FOOT_TYPES.includes(t.highway);
       if (foot && !t.bridge) continue;
-      roads.push({ type: foot ? 'footbridge' : t.highway, name: t.name, pts, tram: t.embedded_rails === 'tram' || undefined, bridge: t.bridge ? true : undefined, oneway: t.oneway === 'yes' || t.oneway === '-1' || t.oneway === '1' || undefined, lanes: parseInt(t.lanes) || undefined });
+      roads.push({ id: el.id, type: foot ? 'footbridge' : t.highway, name: t.name, pts, tram: t.embedded_rails === 'tram' || undefined, bridge: t.bridge ? true : undefined, oneway: t.oneway === 'yes' || t.oneway === '-1' || t.oneway === '1' || undefined, lanes: parseInt(t.lanes) || undefined });
     } else if (t.building) {
       if (pts.length < 4) continue;
       let h = parseFloat(t.height);

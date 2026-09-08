@@ -23,6 +23,7 @@ Open http://localhost:5173.
 - **P** — toggle rain
 - **C** — cycles chase / far / bonnet camera
 - **M** (or click the minimap) — full-screen map; click anywhere to spawn there
+- **E** — city editor: click a road to resize (slider) or delete it, or switch to the tree brush and click/drag to erase trees. Tree edits are instant; road edits apply on reload. Edits live in localStorage — "Preuzmi JSON" downloads an `overrides.json` you can drop into `public/data/` so the deployed game ships them.
 
 A passenger waits at the green beacon; stop next to them, then drive to the yellow beacon (destination shown at the top and on the minimap). Fares pay ~1.5 KM + 1.2 KM/km, plus a tip for a fast ride.
 

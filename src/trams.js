@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const SPEED = 9.5, ACCEL = 1.1, STOP_EVERY = 420, STOP_TIME = 6, CAR_LEN = 10.5, CAR_GAP = 0.9;
 
@@ -47,11 +48,11 @@ export function createTrams(RAPIER, world, scene, data, groundHeight) {
   const lampMat = new THREE.MeshStandardMaterial({ color: '#fff4cc', emissive: '#ffe9a0', emissiveIntensity: 2 });
   function makeCar(withPanto) {
     const g = new THREE.Group();
-    const box = (w, h, d, m, x, y, z) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mm.position.set(x, y, z); mm.castShadow = true; g.add(mm); return mm; };
-    box(2.3, 1.1, CAR_LEN, bodyMat, 0, 1.15, 0);           // lower body
-    box(2.32, 0.22, CAR_LEN, stripeMat, 0, 1.45, 0);       // red stripe
-    box(2.3, 0.9, CAR_LEN - 0.4, glassMat, 0, 2.15, 0);    // window band
-    box(2.2, 0.5, CAR_LEN, bodyMat, 0, 2.85, 0);           // roof
+    const box = (w, h, d, m, x, y, z, r = 0) => { const mm = new THREE.Mesh(r > 0 ? new RoundedBoxGeometry(w, h, d, 2, r) : new THREE.BoxGeometry(w, h, d), m); mm.position.set(x, y, z); mm.castShadow = true; g.add(mm); return mm; };
+    box(2.3, 1.1, CAR_LEN, bodyMat, 0, 1.15, 0, 0.16);           // lower body
+    box(2.32, 0.24, CAR_LEN, stripeMat, 0, 1.45, 0, 0.06);       // red stripe
+    box(2.3, 0.9, CAR_LEN - 0.4, glassMat, 0, 2.15, 0, 0.18);    // window band
+    box(2.2, 0.55, CAR_LEN, bodyMat, 0, 2.85, 0, 0.24);          // roof
     box(2.0, 0.5, CAR_LEN - 1, darkMat, 0, 0.35, 0);       // skirt / bogies
     if (withPanto) { box(0.1, 0.9, 0.1, darkMat, -0.5, 3.5, -1.5); box(0.1, 0.9, 0.1, darkMat, 0.5, 3.5, -1.5); box(1.4, 0.06, 0.4, darkMat, 0, 3.95, -1.5); }
     box(0.5, 0.25, 0.05, lampMat, 0.7, 1.0, CAR_LEN / 2 + 0.01); box(0.5, 0.25, 0.05, lampMat, -0.7, 1.0, CAR_LEN / 2 + 0.01);
@@ -96,7 +97,7 @@ export function createTrams(RAPIER, world, scene, data, groundHeight) {
     }
     if (right > left) pts.reverse();
     routeVotes.push({ left, right, reversed: right > left });
-    const ys = pts.map(([x, z]) => groundHeight(x, z) + 0.4);
+    const ys = pts.map(([x, z]) => groundHeight(x, z) + 0.08);
     for (let pass = 0; pass < 3; pass++) for (let i = 1; i < ys.length - 1; i++) ys[i] = (ys[i - 1] + ys[i] + ys[i + 1]) / 3;
     const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
     const total = cum[cum.length - 1];

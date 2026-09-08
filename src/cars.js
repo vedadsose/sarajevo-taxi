@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { roadWidth } from './city.js';
 
 const COUNT = 110, SPAWN_MIN = 90, SPAWN_MAX = 360, DESPAWN = 460;
@@ -41,9 +42,9 @@ export function createCars(RAPIER, world, scene, data, groundHeight, traffic, pl
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3 });
   const glassMat = new THREE.MeshStandardMaterial({ color: '#1c2630', roughness: 0.15, metalness: 0.5 });
   const wheelMat = new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.9 });
-  const body = new THREE.InstancedMesh(new THREE.BoxGeometry(1.76, 0.55, 4.2), bodyMat, COUNT);
-  const cabin = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.5, 2.1), glassMat, COUNT);
-  const roof = new THREE.InstancedMesh(new THREE.BoxGeometry(1.5, 0.08, 1.9), bodyMat, COUNT);
+  const body = new THREE.InstancedMesh(new RoundedBoxGeometry(1.76, 0.6, 4.2, 2, 0.16), bodyMat, COUNT);
+  const cabin = new THREE.InstancedMesh(new RoundedBoxGeometry(1.58, 0.52, 2.1, 2, 0.2), glassMat, COUNT);
+  const roof = new THREE.InstancedMesh(new RoundedBoxGeometry(1.46, 0.1, 1.85, 2, 0.05), bodyMat, COUNT);
   const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 10); wheelGeo.rotateZ(Math.PI / 2);
   const wheels = [0, 1, 2, 3].map(() => new THREE.InstancedMesh(wheelGeo, wheelMat, COUNT));
   const head = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.14, 0.05), new THREE.MeshStandardMaterial({ color: '#fff7dc', emissive: '#fff0c0', emissiveIntensity: 1.2 }), COUNT);
@@ -153,27 +154,25 @@ export function createCars(RAPIER, world, scene, data, groundHeight, traffic, pl
   }
   body.instanceColor.needsUpdate = roof.instanceColor.needsUpdate = true;
 
-  // per-frame spatial hash of cars for following behaviour
-  const HG = new Map(), HC = 25;
-  function rebuildHash() { HG.clear(); for (const car of cars) { if (!car) continue; const k = `${Math.floor(car.x / HC)},${Math.floor(car.z / HC)}`; if (!HG.has(k)) HG.set(k, []); HG.get(k).push(car); } }
+  // following behaviour: direct scan over ≤COUNT cars (allocation-free; cheaper than rebuilding a hash every step)
+  const ob = { dist: Infinity, v: 0 };
   function obstacleAhead(car, fx, fz, playerPos, playerV) {
     let best = Infinity, bestV = 0;
-    const cx = Math.floor(car.x / HC), cz = Math.floor(car.z / HC);
-    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-      const l = HG.get(`${cx + dx},${cz + dz}`); if (!l) continue;
-      for (const o of l) {
-        if (o === car) continue;
-        const ox = o.x - car.x, oz = o.z - car.z, along = ox * fx + oz * fz, lat = Math.abs(ox * fz - oz * fx);
-        if (along > 0 && along < 22 && lat < 2.3 && along < best) { best = along; bestV = o.v; }
-      }
+    for (let j = 0; j < cars.length; j++) {
+      const o = cars[j];
+      if (!o || o === car) continue;
+      const ox = o.x - car.x, oz = o.z - car.z;
+      if (ox > 24 || ox < -24 || oz > 24 || oz < -24) continue;
+      const along = ox * fx + oz * fz, lat = Math.abs(ox * fz - oz * fx);
+      if (along > 0 && along < 22 && lat < 2.3 && along < best) { best = along; bestV = o.v; }
     }
     const ox = playerPos.x - car.x, oz = playerPos.z - car.z, along = ox * fx + oz * fz, lat = Math.abs(ox * fz - oz * fx);
     if (along > -1 && along < 22 && lat < 2.6 && along < best) { best = along; bestV = Math.max(0, playerV); }
-    return { dist: best, v: bestV };
+    ob.dist = best; ob.v = bestV;
+    return ob;
   }
 
   function update(dt, playerPos, playerV) {
-    rebuildHash();
     for (let idx = 0; idx < COUNT; idx++) {
       let car = cars[idx];
       if (car && (car.dead || Math.hypot(car.x - playerPos.x, car.z - playerPos.z) > DESPAWN)) {

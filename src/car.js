@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 export const TUNE = {
   engine: 3200, reverse: 2000, brake: 45, handbrake: 120,
   maxSteer: 0.6, steerSpeedFalloff: 28, topSpeedKmh: 140,
-  suspStiffness: 34, suspRest: 0.32, suspTravel: 0.22, suspCompression: 2.4, suspRelaxation: 3.2,
+  suspStiffness: 38, suspRest: 0.32, suspTravel: 0.22, suspCompression: 4.4, suspRelaxation: 5.6,
   frictionSlip: 3.0, sideFriction: 1.0, driftSideFriction: 0.35, linDamping: 0.12, angDamping: 1.2,
 };
 
@@ -22,14 +23,14 @@ function buildCarMesh() {
   const body = new THREE.MeshStandardMaterial({ color: '#e8e2d2', roughness: 0.35, metalness: 0.25 });
   const trim = new THREE.MeshStandardMaterial({ color: '#1b1b1d', roughness: 0.8 });
   const glass = new THREE.MeshStandardMaterial({ color: '#233040', roughness: 0.1, metalness: 0.6 });
-  const box = (w, h, d, m, x, y, z) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mm.position.set(x, y, z); mm.castShadow = true; g.add(mm); return mm; };
-  // Golf Mk2-ish proportions: front is +z
-  box(1.66, 0.55, 4.0, body, 0, -0.1, 0);          // lower body
-  box(1.56, 0.5, 2.15, body, 0, 0.42, -0.25);       // cabin
-  box(1.58, 0.36, 2.05, glass, 0, 0.45, -0.25);     // glass band
-  box(1.7, 0.18, 0.2, trim, 0, -0.3, 2.0);          // front bumper
-  box(1.7, 0.18, 0.2, trim, 0, -0.3, -2.0);         // rear bumper
-  const sign = box(0.55, 0.2, 0.22, new THREE.MeshStandardMaterial({ map: taxiSignTexture(), emissive: '#ffd23f', emissiveIntensity: 0.6, emissiveMap: taxiSignTexture() }), 0, 0.77, -0.1);
+  const box = (w, h, d, m, x, y, z, r = 0) => { const mm = new THREE.Mesh(r > 0 ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d), m); mm.position.set(x, y, z); mm.castShadow = true; g.add(mm); return mm; };
+  // Golf Mk2-ish proportions with soft edges: front is +z
+  box(1.66, 0.6, 4.0, body, 0, -0.08, 0, 0.18);        // lower body
+  box(1.56, 0.55, 2.2, body, 0, 0.42, -0.25, 0.22);    // cabin
+  box(1.6, 0.38, 2.08, glass, 0, 0.47, -0.25, 0.14);   // glass band
+  box(1.7, 0.2, 0.24, trim, 0, -0.3, 2.0, 0.08);       // front bumper
+  box(1.7, 0.2, 0.24, trim, 0, -0.3, -2.0, 0.08);      // rear bumper
+  const sign = box(0.55, 0.2, 0.22, new THREE.MeshStandardMaterial({ map: taxiSignTexture(), emissive: '#ffd23f', emissiveIntensity: 0.6, emissiveMap: taxiSignTexture() }), 0, 0.77, -0.1, 0.05);
   sign.material.side = THREE.DoubleSide;
   const hl = new THREE.MeshStandardMaterial({ color: '#fff6d0', emissive: '#fff1b0', emissiveIntensity: 3 });
   box(0.34, 0.16, 0.05, hl, 0.58, -0.02, 2.0); box(0.34, 0.16, 0.05, hl, -0.58, -0.02, 2.0);
@@ -106,7 +107,10 @@ export function createCar(RAPIER, world, scene, spawn) {
     body.setLinvel({ x: 0, y: 0, z: 0 }, true); body.setAngvel({ x: 0, y: 0, z: 0 }, true);
   }
 
+  const prevPos = new THREE.Vector3(spawn.x, spawn.y, spawn.z), prevQ = new THREE.Quaternion();
+  const curPos = new THREE.Vector3(), curQ = new THREE.Quaternion();
   function update(dt, input) {
+    { const p = body.translation(), q0 = body.rotation(); prevPos.set(p.x, p.y, p.z); prevQ.set(q0.x, q0.y, q0.z, q0.w); } // pre-step state for render interpolation
     const speed = forwardSpeed(); // m/s, signed
     const kmh = speed * 3.6;
     // steering with speed falloff
@@ -139,9 +143,14 @@ export function createCar(RAPIER, world, scene, spawn) {
     if (flippedFor > 2) { reset(); flippedFor = 0; }
   }
 
-  function sync(dt) {
+  function sync(dt, alpha = 1) {
     const p = body.translation(), q = body.rotation();
-    mesh.position.set(p.x, p.y, p.z); mesh.quaternion.set(q.x, q.y, q.z, q.w);
+    curPos.set(p.x, p.y, p.z); curQ.set(q.x, q.y, q.z, q.w);
+    // blend between the last two physics states so 120 Hz displays don't see 60 Hz steps
+    if (alpha < 1 && prevPos.distanceToSquared(curPos) < 4) {
+      mesh.position.lerpVectors(prevPos, curPos, alpha);
+      mesh.quaternion.slerpQuaternions(prevQ, curQ, alpha);
+    } else { mesh.position.copy(curPos); mesh.quaternion.copy(curQ); }
     const dist = forwardSpeed() * dt;
     wheels.forEach((w, i) => {
       const c = vehicle.wheelChassisConnectionPointCs(i);

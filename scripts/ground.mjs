@@ -106,8 +106,8 @@ export function solveRoadProfiles(roads, sampleH, opts = {}) {
   for (const r of roads) {
     if (!DRIVABLE.has(r.type) && r.type !== 'footbridge') { chains.push(null); lines.push(null); chainWeight.push(1); continue; }
     const main = MAIN.has(r.type);
-    const wData = main ? 0.25 : 1; // main roads trust the noisy DEM less…
-    chainWeight.push(main ? 6 : 1);  // …and are held much smoother
+    const wData = main ? 0.15 : 0.55; // trust the noisy DEM less everywhere…
+    chainWeight.push(main ? 14 : 3);  // …and hold main roads billiard-smooth
     // smooth the horizontal path between junctions, then densify
     const smooth = r.pts.length > 2 ? smoothKeepingJunctions(r.pts) : r.pts;
     const dense = [];
